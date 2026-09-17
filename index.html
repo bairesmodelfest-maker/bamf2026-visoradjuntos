@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BAMF 2026 — Consulta de Documentación</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4ede0;
+  --paper-soft:#ebe2d2;
+  --ink:#0e0c08;
+  --ink-soft:#3a342a;
+  --accent:#c8954b;
+  --accent-deep:#a87635;
+  --line:#cdc3b0;
+  --error:#c4453d;
+  --ok:#7a9d6a;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden}
+body{font-family:'Fraunces',serif;background:var(--paper);color:var(--ink);user-select:none;-webkit-tap-highlight-color:transparent;line-height:1.4}
+
+.screen{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:clamp(20px,4vh,60px) clamp(20px,4vw,60px);overflow:hidden}
+.screen.active{display:flex}
+
+/* ---------- SEARCH SCREEN ---------- */
+#s-search{padding-top:clamp(40px,8vh,90px)}
+.search-title{font-family:'Fraunces',serif;font-weight:400;font-size:clamp(34px,5vw,58px);text-align:center;margin-bottom:8px;line-height:1.05}
+.search-title em{font-style:italic;color:var(--accent);font-weight:600}
+.search-subtitle{font-family:'Fraunces',serif;font-size:clamp(20px,2.6vw,32px);color:var(--ink-soft);font-weight:400;margin-bottom:clamp(24px,4vh,48px);text-align:center;letter-spacing:.01em;font-style:italic;opacity:.85}
+
+.input-display{font-family:'JetBrains Mono',monospace;font-size:clamp(36px,5.5vw,68px);font-weight:600;letter-spacing:.1em;min-height:90px;padding:18px 36px;border-bottom:3px solid var(--ink);min-width:min(360px,80vw);text-align:center;margin-bottom:clamp(20px,3vh,32px);color:var(--ink);background:transparent}
+.input-display.empty{color:var(--ink-soft);opacity:.3}
+.input-display.empty::before{content:'#'}
+.input-display .hash{color:var(--accent);font-weight:600;margin-right:.05em}
+
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(8px,1.2vw,14px);width:min(420px,82vw);margin-bottom:clamp(20px,3vh,28px)}
+.key{background:var(--paper-soft);border:1px solid var(--line);border-radius:3px;font-family:'Fraunces',serif;font-weight:500;font-size:clamp(26px,3.4vw,38px);color:var(--ink);transition:all .12s;cursor:pointer;aspect-ratio:1.4/1;display:flex;align-items:center;justify-content:center;user-select:none}
+.key:active,.key:hover{background:var(--ink);color:var(--paper);border-color:var(--ink);transform:scale(.97)}
+
+.actions-row{display:flex;gap:clamp(10px,2vw,18px);width:min(420px,82vw);margin-bottom:18px}
+.btn-big{flex:1;padding:18px 28px;font-family:'Fraunces',serif;font-size:clamp(15px,1.7vw,18px);font-weight:600;letter-spacing:.18em;text-transform:uppercase;border:1.5px solid var(--ink);border-radius:2px;cursor:pointer;transition:all .2s;background:transparent;color:var(--ink)}
+.btn-big.primary{background:var(--ink);color:var(--paper)}
+.btn-big.primary:hover,.btn-big.primary:active{background:var(--ink-soft)}
+.btn-big.ghost:hover,.btn-big.ghost:active{background:var(--ink);color:var(--paper)}
+.btn-big:disabled{opacity:.4;cursor:not-allowed}
+
+/* ---------- RESULT SCREEN ---------- */
+#s-result{padding:0;justify-content:flex-start}
+.result-header{width:100%;background:var(--ink);color:var(--paper);padding:clamp(10px,1.6vh,22px) clamp(14px,3vw,40px);display:flex;align-items:center;gap:clamp(10px,2vw,28px);border-bottom:2px solid var(--accent-deep);flex-shrink:0}
+.result-header .orden-big{font-family:'Fraunces',serif;font-weight:700;font-size:clamp(24px,5.5vw,56px);line-height:1;color:var(--accent);letter-spacing:-.02em;white-space:nowrap}
+.result-header .orden-big::before{content:'#';color:var(--paper);opacity:.5;font-weight:400;margin-right:.04em}
+.result-header .modelo-info{flex:1;min-width:0}
+.result-header .modelo-nombre{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(14px,3.6vw,30px);text-transform:uppercase;letter-spacing:.01em;line-height:1.15;color:var(--paper)}
+.result-header .modelo-hint{font-family:'JetBrains Mono',monospace;font-size:clamp(8px,1.8vw,13px);letter-spacing:.1em;text-transform:uppercase;margin-top:4px;color:var(--accent);opacity:.8;line-height:1.3}
+.result-header .modelo-hint:empty{display:none}
+.result-header .actions{display:flex;gap:10px;flex-shrink:0}
+.result-header .actions button{background:transparent;border:1.5px solid var(--paper);color:var(--paper);padding:clamp(8px,1.4vh,14px) clamp(10px,2.5vw,22px);font-family:'Fraunces',serif;font-size:clamp(10px,2vw,16px);letter-spacing:.12em;text-transform:uppercase;font-weight:600;cursor:pointer;border-radius:2px;transition:all .15s;white-space:nowrap}
+.result-header .actions button:hover,.result-header .actions button:active{background:var(--paper);color:var(--ink)}
+
+/* === CELULAR VERTICAL: pantalla angosta < 600px === */
+@media (max-width: 600px){
+  .result-header{padding:10px 12px;gap:10px}
+  .result-header .orden-big{font-size:22px}
+  .result-header .modelo-nombre{font-size:13px;line-height:1.2}
+  .result-header .modelo-hint{font-size:8px;letter-spacing:.08em;margin-top:3px;line-height:1.3}
+  .result-header .actions button{padding:7px 10px;font-size:10px;letter-spacing:.08em;border-width:1px}
+  /* En celu, "Nueva consulta" se acorta a solo flecha + "Nueva" si hace falta */
+}
+
+.pdf-container{flex:1;width:100%;background:#3a342a;position:relative;overflow:hidden}
+.pdf-container iframe,.pdf-container embed{position:absolute;inset:0;width:100%;height:100%;border:none;background:white}
+.img-wrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#3a342a;cursor:zoom-in;overflow:auto}
+.img-wrap img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.img-wrap.full{cursor:zoom-out;overflow:auto}
+.img-wrap.full img{max-width:none;max-height:none;width:auto;height:auto}
+.img-error{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;color:var(--paper);gap:14px}
+.img-error h3{font-family:'Fraunces',serif;font-weight:500;font-size:clamp(20px,2.6vw,30px);color:var(--paper)}
+.img-error p{font-family:'Fraunces',serif;font-size:clamp(14px,1.6vw,18px);color:var(--paper);opacity:.7;line-height:1.5;max-width:700px;word-break:break-all}
+.img-error a{color:var(--accent);font-weight:600;text-decoration:underline}
+.pdf-fallback{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;color:var(--paper);gap:18px}
+.pdf-fallback h3{font-family:'Fraunces',serif;font-weight:500;font-size:clamp(22px,2.8vw,34px);color:var(--paper)}
+.pdf-fallback p{font-family:'Fraunces',serif;font-size:clamp(15px,1.8vw,20px);color:var(--paper);opacity:.7;line-height:1.5;max-width:600px}
+
+/* ---------- ERROR MODAL ---------- */
+.error-modal{position:fixed;inset:0;background:rgba(14,12,8,.78);display:none;align-items:center;justify-content:center;z-index:300;padding:20px;animation:fadeIn .2s ease-out}
+.error-modal.show{display:flex}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes popIn{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+.error-modal-card{background:var(--paper);border:2px solid var(--error);border-radius:4px;padding:clamp(36px,5vh,56px) clamp(36px,5vw,56px);max-width:min(560px,92vw);text-align:center;animation:popIn .25s ease-out;box-shadow:0 20px 60px rgba(0,0,0,.4)}
+.error-modal-card.info{border-color:var(--accent-deep)}
+.error-icon{width:80px;height:80px;border-radius:50%;background:var(--error);color:var(--paper);font-family:'Fraunces',serif;font-weight:700;font-size:54px;line-height:80px;margin:0 auto 24px}
+.error-icon.info{background:var(--accent-deep)}
+.error-title{font-family:'Fraunces',serif;font-weight:600;font-size:clamp(28px,3.6vw,42px);color:var(--ink);margin-bottom:14px;line-height:1.15}
+.error-title em{font-style:italic;color:var(--error)}
+.error-title.info em{color:var(--accent-deep)}
+.error-body{font-family:'Fraunces',serif;font-size:clamp(17px,2vw,22px);color:var(--ink-soft);line-height:1.4;margin-bottom:clamp(28px,4vh,40px)}
+.error-body strong{color:var(--ink);font-weight:600}
+.error-modal-btn{min-width:200px}
+
+/* Loader */
+#loader{position:fixed;inset:0;background:var(--paper);display:none;align-items:center;justify-content:center;z-index:50;flex-direction:column;gap:18px}
+#loader.show{display:flex}
+.spinner{width:48px;height:48px;border:3px solid var(--line);border-top-color:var(--accent-deep);border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-text{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink-soft);letter-spacing:.1em;text-transform:uppercase;opacity:.6}
+
+/* Ornaments */
+.ornament{position:absolute;font-family:'Fraunces',serif;font-style:italic;color:var(--accent);opacity:.12;font-size:clamp(60px,12vw,140px);pointer-events:none;z-index:0}
+.ornament.top-left{top:8vh;left:6vw}
+.ornament.bottom-right{bottom:8vh;right:6vw}
+</style>
+</head>
+<body>
+
+<!-- Loader -->
+<div id="loader">
+  <div class="spinner"></div>
+  <div class="loader-text">Buscando…</div>
+</div>
+
+<!-- SCREEN 1: SEARCH -->
+<div class="screen active" id="s-search">
+  <span class="ornament top-left">✦</span>
+  <span class="ornament bottom-right">❦</span>
+  <h1 class="search-title">Consulta de <em>documentación</em></h1>
+  <p class="search-subtitle">Ingresá el número de orden del modelo</p>
+  <div class="input-display empty" id="inputDisplay">0</div>
+  <div class="numpad" id="numpad"></div>
+  <div class="actions-row">
+    <button class="btn-big ghost" onclick="clearInput()">BORRAR</button>
+    <button class="btn-big primary" id="btnSearch" onclick="doSearch()">BUSCAR</button>
+  </div>
+  <div class="actions-row" id="rowReturnSearch" style="display:none">
+    <button class="btn-big ghost" id="btnReturnSearch" onclick="volverAOrigen()">← Volver</button>
+  </div>
+</div>
+
+<!-- SCREEN 2: RESULT con PDF embebido -->
+<div class="screen" id="s-result">
+  <div class="result-header">
+    <div class="orden-big" id="resOrden">—</div>
+    <div class="modelo-info">
+      <div class="modelo-nombre" id="resModelo">—</div>
+      <div class="modelo-hint" id="resHint"></div>
+    </div>
+    <div class="actions">
+      <button id="btnReturn" style="display:none" onclick="volverAOrigen()">← Volver</button>
+      <button onclick="resetSearch()">← Nueva consulta</button>
+    </div>
+  </div>
+  <div class="pdf-container" id="pdfContainer">
+    <!-- iframe del PDF se inyecta dinámicamente -->
+  </div>
+</div>
+
+<!-- MODAL ERROR / INFO -->
+<div id="errorModal" class="error-modal">
+  <div class="error-modal-card" id="errorCard">
+    <div class="error-icon" id="errorIcon">!</div>
+    <div class="error-title" id="errorTitle">Aviso</div>
+    <div class="error-body" id="errorBody">—</div>
+    <button class="btn-big primary error-modal-btn" onclick="closeErrorModal()">Aceptar</button>
+  </div>
+</div>
+
+<script>
+// ============ CONFIG ============
+var JOTFORM_API_KEY = 'e715b4edcb1f67a94f25c99a2f0c3635';
+var JOTFORM_FORM_ID = '240386129030651';
+
+// QIDs relevantes
+var QID_ORDEN = '448';
+var QID_NOMBRE_MODELO = '461';
+var QID_DOCUMENTACION = '376';     // "Documentación de Respaldo" (SI / NO)
+// QID del campo Cincopa "Upload Media Files" (nombre único: escribaUna486)
+var QID_ADJUNTO_CINCOPA = '486';
+
+// ============ HELPERS ============
+function getAns(a){
+  if(!a) return '';
+  if(typeof a.answer === 'string') return a.answer;
+  if(a.answer && typeof a.answer === 'object'){
+    if(Array.isArray(a.answer)) return a.answer;
+    if(a.answer.first || a.answer.last){
+      return ((a.answer.last||'') + ' ' + (a.answer.first||'')).trim();
+    }
+    if(a.answer.full) return a.answer.full;
+  }
+  if(a.prettyFormat) return a.prettyFormat;
+  return '';
+}
+
+// El campo de Cincopa puede venir como:
+//  - string con la URL directa
+//  - string con HTML/embed code (extraer URL)
+//  - objeto con propiedades de Cincopa
+// Devolvemos array de URLs siempre.
+// Dominios desde donde SÍ confiamos en embeber un archivo. Cualquier otra
+// URL (por ejemplo, si alguien cargó por error el link de otro sitio de
+// BAMF en este campo) se descarta y se trata como "sin documentación",
+// en vez de embeberla a ciegas.
+var DOMINIOS_ADJUNTO_PERMITIDOS = [
+  /(^|\.)res\.cloudinary\.com$/i,   // donde realmente vive el archivo subido
+  /(^|\.)cincopa\.com$/i           // por si queda algún adjunto viejo con este formato
+];
+
+function urlDeDominioPermitido(url){
+  try{
+    var host = new URL(url).hostname;
+    return DOMINIOS_ADJUNTO_PERMITIDOS.some(function(re){ return re.test(host); });
+  }catch(e){
+    return false;
+  }
+}
+
+function getAdjuntoUrls(a){
+  if(!a) return [];
+  var v = a.answer;
+  if(!v) return [];
+
+  // Caso simple: string
+  if(typeof v === 'string'){
+    var trimmed = v.trim();
+    if(!trimmed) return [];
+    // Si contiene una URL de Cincopa, extraerla
+    var match = trimmed.match(/https:\/\/[a-zA-Z0-9.-]*cincopa\.com\/[^\s"'<>]+/);
+    if(match) return [match[0]];
+    // Si parece URL en general, la aceptamos SOLO si es de un dominio de
+    // confianza — no cualquier URL que haya quedado cargada en el campo.
+    if(/^https?:\/\//.test(trimmed) && urlDeDominioPermitido(trimmed)) return [trimmed];
+    return [];
+  }
+
+  // Caso array de strings
+  if(Array.isArray(v)){
+    return v.filter(function(x){ return x && typeof x === 'string' && urlDeDominioPermitido(x); });
+  }
+
+  // Caso objeto Cincopa (varias propiedades posibles)
+  if(typeof v === 'object'){
+    var urls = [];
+    if(v.url) urls.push(v.url);
+    if(v.link) urls.push(v.link);
+    if(v.src) urls.push(v.src);
+    if(v.watch) urls.push(v.watch);
+    return urls.filter(urlDeDominioPermitido);
+  }
+
+  return [];
+}
+
+// Detecta si la URL apunta a un archivo de imagen (jpg, png, etc.)
+function isImageUrl(url){
+  if(!url) return false;
+  return /\.(jpe?g|png|gif|webp|bmp)(\?[^]*)?$/i.test(url);
+}
+
+// ============ NUMPAD ============
+function buildNumpad(){
+  var pad = document.getElementById('numpad');
+  pad.innerHTML = '';
+  var keys = ['1','2','3','4','5','6','7','8','9','','0',''];
+  keys.forEach(function(k){
+    var btn = document.createElement('button');
+    btn.className = 'key';
+    if(!k){ btn.style.visibility = 'hidden'; }
+    btn.textContent = k;
+    btn.onclick = function(){ if(k) appendDigit(k); };
+    pad.appendChild(btn);
+  });
+}
+
+var INPUT_VALUE = '';
+var IS_SEARCHING = false;
+var CURRENT_PDF_URL = null;  // URL del primer adjunto del modelo encontrado
+var RETURN_URL = null;       // si vinimos desde otra app (ej. Juzgamiento), a dónde volver
+var RETURN_LABEL = null;     // texto del botón de volver, si nos lo mandaron
+
+function appendDigit(d){
+  if(IS_SEARCHING) return;
+  if(INPUT_VALUE.length >= 5) return;
+  INPUT_VALUE += d;
+  updateDisplay();
+}
+
+function clearInput(){
+  if(IS_SEARCHING) return;
+  INPUT_VALUE = '';
+  updateDisplay();
+}
+
+function updateDisplay(){
+  var el = document.getElementById('inputDisplay');
+  if(INPUT_VALUE === ''){
+    el.classList.add('empty');
+    el.textContent = '0';
+  } else {
+    el.classList.remove('empty');
+    el.innerHTML = '<span class="hash">#</span>' + INPUT_VALUE;
+  }
+  document.getElementById('btnSearch').disabled = INPUT_VALUE.length === 0 || IS_SEARCHING;
+}
+
+// ============ SEARCH (consulta en vivo a JotForm) ============
+function doSearch(){
+  if(INPUT_VALUE === '' || IS_SEARCHING) return;
+  IS_SEARCHING = true;
+  document.getElementById('btnSearch').disabled = true;
+  document.getElementById('btnSearch').textContent = 'BUSCANDO…';
+  document.getElementById('loader').classList.add('show');
+
+  var raw = INPUT_VALUE;
+  var primaryKey = raw.padStart(3,'0');
+
+  searchByOrden(primaryKey).then(function(found){
+    if(found){ showResult(found); return; }
+    if(raw !== primaryKey){
+      return searchByOrden(raw).then(function(f2){
+        if(f2){ showResult(f2); return; }
+        var stripped = raw.replace(/^0+/,'') || '0';
+        if(stripped !== raw && stripped !== primaryKey){
+          return searchByOrden(stripped).then(function(f3){
+            if(f3) showResult(f3); else notFound();
+          });
+        }
+        notFound();
+      });
+    }
+    notFound();
+  }).catch(function(err){
+    console.error('Error de búsqueda:', err);
+    document.getElementById('loader').classList.remove('show');
+    showModal('Error de <em>conexión</em>',
+      'No pudimos conectarnos a la base de datos.<br>Verificá tu internet y probá de nuevo.', 'error');
+    resetSearchButton();
+  });
+}
+
+function searchByOrden(ordenStr){
+  var filterObj = { 'q448:eq': ordenStr, 'status': 'ACTIVE' };
+  var url = 'https://api.jotform.com/form/' + JOTFORM_FORM_ID + '/submissions' +
+            '?apiKey=' + JOTFORM_API_KEY +
+            '&limit=5' +
+            '&filter=' + encodeURIComponent(JSON.stringify(filterObj));
+  return fetch(url).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(d){
+    if(d.responseCode !== 200) throw new Error(d.message||'API error');
+    var subs = d.content || [];
+    if(subs.length === 0) return null;
+    return parseSubmission(subs[0]);
+  });
+}
+
+function parseSubmission(sub){
+  var a = sub.answers || {};
+  return {
+    submissionID: sub.id,
+    orden: getAns(a[QID_ORDEN]) || '',
+    modelo: getAns(a[QID_NOMBRE_MODELO]) || '(sin nombre)',
+    documentacion: getAns(a[QID_DOCUMENTACION]) || '',
+    adjuntos: getAdjuntoUrls(a[QID_ADJUNTO_CINCOPA])
+  };
+}
+
+function notFound(){
+  document.getElementById('loader').classList.remove('show');
+  showModal('Modelo <em>no encontrado</em>',
+    'No existe el modelo <strong>#' + escapeHTML(INPUT_VALUE) + '</strong>.<br>' +
+    'Verificá el número e intentá de nuevo.', 'error');
+  resetSearchButton();
+}
+
+function resetSearchButton(){
+  IS_SEARCHING = false;
+  var btn = document.getElementById('btnSearch');
+  btn.textContent = 'BUSCAR';
+  btn.disabled = INPUT_VALUE.length === 0;
+}
+
+function showResult(m){
+  IS_SEARCHING = false;
+  resetSearchButton();
+  document.getElementById('loader').classList.remove('show');
+
+  document.getElementById('resOrden').textContent = (m.orden.replace(/^0+/,'') || m.orden);
+  document.getElementById('resModelo').textContent = m.modelo;
+
+  var tieneAdjunto = m.adjuntos.length > 0;
+  CURRENT_PDF_URL = tieneAdjunto ? m.adjuntos[0] : null;
+  var container = document.getElementById('pdfContainer');
+  container.innerHTML = '';
+
+  // Hint en el header: instrucción para galería Cincopa
+  var hintEl = document.getElementById('resHint');
+  if(hintEl) hintEl.textContent = '';
+
+  if(CURRENT_PDF_URL){
+    var isCincopaWatch = /cincopa\.com\/watch\//.test(CURRENT_PDF_URL);
+    if(isImageUrl(CURRENT_PDF_URL)){
+      // Imagen suelta (jpg/png/etc): mostrar con <img>, no funciona bien dentro de un iframe
+      if(hintEl) hintEl.textContent = 'Hacer click en la imagen para ampliar';
+      console.log('URL de imagen a cargar:', CURRENT_PDF_URL);
+      container.innerHTML =
+        '<div class="img-wrap" id="imgWrap" onclick="toggleImgZoom()">' +
+          '<img src="' + escapeAttr(CURRENT_PDF_URL) + '" alt="Documentación de respaldo" ' +
+          'onerror="showImgError(this)">' +
+        '</div>';
+    } else if(isCincopaWatch){
+      // Hint informativo en el header
+      if(hintEl) hintEl.textContent = 'Hacer click en las miniaturas para ver en pantalla completa';
+      // Cincopa player: muestra la galería con miniaturas
+      container.innerHTML =
+        '<iframe src="' + escapeAttr(CURRENT_PDF_URL) + '" ' +
+        'title="Documentación de respaldo" ' +
+        'sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" ' +
+        'allowfullscreen></iframe>';
+    } else {
+      // PDF directo: embed con toolbar nativa del visor
+      // sandbox SIN "allow-top-navigation": si el link cargado adentro
+      // resulta no ser un PDF/Cincopa válido (por ej. un link de JotForm
+      // con script anti-iframe), no puede redirigir toda la pestaña.
+      container.innerHTML =
+        '<iframe src="' + escapeAttr(CURRENT_PDF_URL) + '#toolbar=1&navpanes=0" ' +
+        'title="Documentación de respaldo" ' +
+        'sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>';
+    }
+  } else {
+    container.innerHTML =
+      '<div class="pdf-fallback">' +
+        '<h3>Sin documentación adjunta</h3>' +
+        '<p>Este modelo no tiene archivos de respaldo cargados en el formulario de inscripción.</p>' +
+      '</div>';
+  }
+
+  goScreen('result');
+}
+
+function toggleImgZoom(){
+  var wrap = document.getElementById('imgWrap');
+  if(!wrap) return;
+  wrap.classList.toggle('full');
+}
+
+function showImgError(imgEl){
+  var url = imgEl.src;
+  var container = document.getElementById('pdfContainer');
+  container.innerHTML =
+    '<div class="img-error">' +
+      '<h3>No se pudo cargar la imagen</h3>' +
+      '<p>El navegador no pudo mostrar este archivo directamente. URL recibida:<br>' +
+      '<a href="' + escapeAttr(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a></p>' +
+      '<p>Tocá el link para abrirla en una pestaña nueva.</p>' +
+    '</div>';
+  console.warn('Error al cargar imagen:', url);
+}
+
+function resetSearch(){
+  INPUT_VALUE = '';
+  CURRENT_PDF_URL = null;
+  document.getElementById('pdfContainer').innerHTML = '';
+  updateDisplay();
+  goScreen('search');
+}
+
+function goScreen(name){
+  document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('active'); });
+  document.getElementById('s-' + name).classList.add('active');
+}
+
+// ============ MODAL ============
+function showModal(title, body, type){
+  var modal = document.getElementById('errorModal');
+  var card = document.getElementById('errorCard');
+  var icon = document.getElementById('errorIcon');
+  var ttl = document.getElementById('errorTitle');
+  var bdy = document.getElementById('errorBody');
+  if(type === 'info'){
+    card.classList.add('info'); icon.classList.add('info'); ttl.classList.add('info');
+  } else {
+    card.classList.remove('info'); icon.classList.remove('info'); ttl.classList.remove('info');
+  }
+  ttl.innerHTML = title;
+  bdy.innerHTML = body;
+  modal.classList.add('show');
+}
+
+function closeErrorModal(){
+  document.getElementById('errorModal').classList.remove('show');
+  clearInput();
+}
+
+function escapeHTML(s){
+  return String(s||'').replace(/[&<>"']/g, function(c){
+    return ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c];
+  });
+}
+
+function escapeAttr(s){
+  return String(s||'').replace(/["<>&]/g, function(c){
+    return ({ '"':'&quot;','<':'&lt;','>':'&gt;','&':'&amp;' })[c];
+  });
+}
+
+// ============ KEYBOARD (desktop testing) ============
+document.addEventListener('keydown', function(e){
+  if(!document.getElementById('s-search').classList.contains('active')) return;
+  if(IS_SEARCHING) return;
+  if(e.key >= '0' && e.key <= '9') appendDigit(e.key);
+  else if(e.key === 'Backspace'){
+    INPUT_VALUE = INPUT_VALUE.slice(0,-1);
+    updateDisplay();
+  } else if(e.key === 'Enter') doSearch();
+  else if(e.key === 'Escape'){
+    var modal = document.getElementById('errorModal');
+    if(modal && modal.classList.contains('show')) closeErrorModal();
+    else clearInput();
+  }
+});
+
+// ============ RETURN (volver a la app que abrió este visor, ej. Juzgamiento) ============
+function volverAOrigen(){
+  if(RETURN_URL) window.location.href = RETURN_URL;
+}
+
+function aplicarBotonVolver(){
+  var label = RETURN_LABEL ? escapeHTML(RETURN_LABEL) : '← Volver';
+  var show = RETURN_URL ? '' : 'none';
+  var btnResult = document.getElementById('btnReturn');
+  if(btnResult){ btnResult.textContent = label; btnResult.style.display = show; }
+  var rowSearch = document.getElementById('rowReturnSearch');
+  var btnSearchReturn = document.getElementById('btnReturnSearch');
+  if(rowSearch && btnSearchReturn){
+    btnSearchReturn.textContent = label;
+    rowSearch.style.display = show;
+  }
+}
+
+// ============ INIT ============
+function init(){
+  buildNumpad();
+  updateDisplay();
+
+  // Si nos abrieron desde otra app (ej. Juzgamiento) con ?orden=&returnUrl=&returnLabel=,
+  // pre-cargamos el modelo y mostramos un botón para volver. Si no vienen estos
+  // parámetros, el visor funciona exactamente igual que siempre (búsqueda manual).
+  var params = new URLSearchParams(window.location.search);
+  var ordenParam = (params.get('orden') || '').trim();
+  var returnUrlParam = params.get('returnUrl');
+  var returnLabelParam = params.get('returnLabel');
+
+  if(returnUrlParam) RETURN_URL = returnUrlParam;
+  if(returnLabelParam) RETURN_LABEL = returnLabelParam;
+  aplicarBotonVolver();
+
+  if(ordenParam){
+    INPUT_VALUE = ordenParam.replace(/[^0-9]/g,'').slice(0,5);
+    updateDisplay();
+    if(INPUT_VALUE) doSearch();
+  }
+}
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
