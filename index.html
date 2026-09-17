@@ -75,6 +75,10 @@ body{font-family:'Fraunces',serif;background:var(--paper);color:var(--ink);user-
 .img-wrap img{max-width:100%;max-height:100%;object-fit:contain;display:block}
 .img-wrap.full{cursor:zoom-out;overflow:auto}
 .img-wrap.full img{max-width:none;max-height:none;width:auto;height:auto}
+.img-gallery{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;background:#3a342a;padding:12px;display:flex;flex-direction:column;gap:12px}
+.img-gallery-item{display:block;text-align:center;flex:0 0 auto}
+.img-gallery-item img{max-width:100%;max-height:75vh;object-fit:contain;border-radius:4px;background:#241f1a;display:inline-block}
+.img-gallery-item-error{padding:0}
 .img-error{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;text-align:center;color:var(--paper);gap:14px}
 .img-error h3{font-family:'Fraunces',serif;font-weight:500;font-size:clamp(20px,2.6vw,30px);color:var(--paper)}
 .img-error p{font-family:'Fraunces',serif;font-size:clamp(14px,1.6vw,18px);color:var(--paper);opacity:.7;line-height:1.5;max-width:700px;word-break:break-all}
@@ -224,11 +228,24 @@ function getAdjuntoUrls(a){
   if(typeof v === 'string'){
     var trimmed = v.trim();
     if(!trimmed) return [];
-    // Si contiene una URL de Cincopa, extraerla
-    var match = trimmed.match(/https:\/\/[a-zA-Z0-9.-]*cincopa\.com\/[^\s"'<>]+/);
-    if(match) return [match[0]];
-    // Si parece URL en general, la aceptamos SOLO si es de un dominio de
-    // confianza — no cualquier URL que haya quedado cargada en el campo.
+
+    // JotForm a veces devuelve VARIOS archivos pegados en el mismo string,
+    // sin separador (ej: "...jpghttps://...jpghttps://..."). Por eso NO
+    // asumimos que todo el string es una sola URL: buscamos cada URL
+    // individual, cortando en el límite de extensión de archivo o de
+    // "cincopa.com/...", que es donde termina cada una.
+    var encontradas = [];
+    var reCincopa = /https:\/\/[a-zA-Z0-9.-]*cincopa\.com\/[^\s"'<>]+?(?=https?:\/\/|$)/gi;
+    var m;
+    while((m = reCincopa.exec(trimmed))){ encontradas.push(m[0]); }
+
+    var reArchivo = /https?:\/\/[^\s"'<>]+?\.(?:jpe?g|png|gif|webp|bmp|pdf)(?=https?:\/\/|$)/gi;
+    while((m = reArchivo.exec(trimmed))){ encontradas.push(m[0]); }
+
+    if(encontradas.length) return encontradas.filter(urlDeDominioPermitido);
+
+    // Fallback: un solo string que "parece" una URL entera, sin extensión
+    // reconocible (poco común, pero por las dudas).
     if(/^https?:\/\//.test(trimmed) && urlDeDominioPermitido(trimmed)) return [trimmed];
     return [];
   }
@@ -274,7 +291,7 @@ function buildNumpad(){
 
 var INPUT_VALUE = '';
 var IS_SEARCHING = false;
-var CURRENT_PDF_URL = null;  // URL del primer adjunto del modelo encontrado
+var CURRENT_PDF_URLS = [];  // URLs de todos los adjuntos del modelo encontrado
 var RETURN_URL = null;       // si vinimos desde otra app (ej. Juzgamiento), a dónde volver
 var RETURN_LABEL = null;     // texto del botón de volver, si nos lo mandaron
 
@@ -389,32 +406,40 @@ function showResult(m){
   document.getElementById('resOrden').textContent = (m.orden.replace(/^0+/,'') || m.orden);
   document.getElementById('resModelo').textContent = m.modelo;
 
-  var tieneAdjunto = m.adjuntos.length > 0;
-  CURRENT_PDF_URL = tieneAdjunto ? m.adjuntos[0] : null;
+  var adjuntos = m.adjuntos || [];
+  CURRENT_PDF_URLS = adjuntos;
   var container = document.getElementById('pdfContainer');
   container.innerHTML = '';
 
-  // Hint en el header: instrucción para galería Cincopa
+  // Hint en el header: instrucción para galería / imágenes
   var hintEl = document.getElementById('resHint');
   if(hintEl) hintEl.textContent = '';
 
-  if(CURRENT_PDF_URL){
-    var isCincopaWatch = /cincopa\.com\/watch\//.test(CURRENT_PDF_URL);
-    if(isImageUrl(CURRENT_PDF_URL)){
-      // Imagen suelta (jpg/png/etc): mostrar con <img>, no funciona bien dentro de un iframe
-      if(hintEl) hintEl.textContent = 'Hacer click en la imagen para ampliar';
-      console.log('URL de imagen a cargar:', CURRENT_PDF_URL);
+  if(adjuntos.length){
+    var imagenes = adjuntos.filter(isImageUrl);
+    if(imagenes.length){
+      // Una o varias fotos (jpg/png/etc): las mostramos todas, en una
+      // columna con scroll. Cada una se abre en una pestaña nueva al
+      // tocarla, para poder hacer zoom con los gestos normales del celular.
+      if(hintEl){
+        hintEl.textContent = imagenes.length > 1
+          ? 'Deslizá para ver las ' + imagenes.length + ' fotos · Tocá una para ampliarla'
+          : 'Tocá la imagen para ampliarla';
+      }
       container.innerHTML =
-        '<div class="img-wrap" id="imgWrap" onclick="toggleImgZoom()">' +
-          '<img src="' + escapeAttr(CURRENT_PDF_URL) + '" alt="Documentación de respaldo" ' +
-          'onerror="showImgError(this)">' +
+        '<div class="img-gallery">' +
+        imagenes.map(function(url, i){
+          return '<a class="img-gallery-item" href="' + escapeAttr(url) + '" target="_blank" rel="noopener">' +
+            '<img src="' + escapeAttr(url) + '" alt="Documentación de respaldo ' + (i+1) + '" onerror="showImgError(this)">' +
+          '</a>';
+        }).join('') +
         '</div>';
-    } else if(isCincopaWatch){
+    } else if(/cincopa\.com\/watch\//.test(adjuntos[0])){
       // Hint informativo en el header
       if(hintEl) hintEl.textContent = 'Hacer click en las miniaturas para ver en pantalla completa';
       // Cincopa player: muestra la galería con miniaturas
       container.innerHTML =
-        '<iframe src="' + escapeAttr(CURRENT_PDF_URL) + '" ' +
+        '<iframe src="' + escapeAttr(adjuntos[0]) + '" ' +
         'title="Documentación de respaldo" ' +
         'sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox" ' +
         'allowfullscreen></iframe>';
@@ -424,7 +449,7 @@ function showResult(m){
       // resulta no ser un PDF/Cincopa válido (por ej. un link de JotForm
       // con script anti-iframe), no puede redirigir toda la pestaña.
       container.innerHTML =
-        '<iframe src="' + escapeAttr(CURRENT_PDF_URL) + '#toolbar=1&navpanes=0" ' +
+        '<iframe src="' + escapeAttr(adjuntos[0]) + '#toolbar=1&navpanes=0" ' +
         'title="Documentación de respaldo" ' +
         'sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"></iframe>';
     }
@@ -447,20 +472,29 @@ function toggleImgZoom(){
 
 function showImgError(imgEl){
   var url = imgEl.src;
-  var container = document.getElementById('pdfContainer');
-  container.innerHTML =
+  // Si es parte de la galería de varias fotos, solo reemplazamos ESA
+  // foto por el aviso de error — no borramos las demás que sí cargaron.
+  // (reemplazamos el <a> entero por un <div>, para no anidar un <a>
+  // dentro de otro <a>)
+  var item = imgEl.closest('.img-gallery-item');
+  var errorHtml =
     '<div class="img-error">' +
       '<h3>No se pudo cargar la imagen</h3>' +
       '<p>El navegador no pudo mostrar este archivo directamente. URL recibida:<br>' +
       '<a href="' + escapeAttr(url) + '" target="_blank" rel="noopener">' + escapeHTML(url) + '</a></p>' +
       '<p>Tocá el link para abrirla en una pestaña nueva.</p>' +
     '</div>';
+  if(item){
+    item.outerHTML = '<div class="img-gallery-item img-gallery-item-error">' + errorHtml + '</div>';
+  } else {
+    document.getElementById('pdfContainer').innerHTML = errorHtml;
+  }
   console.warn('Error al cargar imagen:', url);
 }
 
 function resetSearch(){
   INPUT_VALUE = '';
-  CURRENT_PDF_URL = null;
+  CURRENT_PDF_URLS = [];
   document.getElementById('pdfContainer').innerHTML = '';
   updateDisplay();
   goScreen('search');
